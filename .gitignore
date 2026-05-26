@@ -1,0 +1,23 @@
+# Секреты — никогда не коммитим
+.env
+*.session
+*.session-journal
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Логи и данные бота
+logs/
+*.log
+trades.json
+state.json
+
+# Среда разработки
+.vscode/
+.idea/
+.DS_Store
