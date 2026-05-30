@@ -1,0 +1,25 @@
+# systemd-юнит для автозапуска Telegram-бота.
+# Как использовать (по шагам в README):
+#   1) поправь путь WorkingDirectory и User под свой сервер;
+#   2) sudo cp deploy/vpn-bot.service /etc/systemd/system/
+#   3) sudo systemctl daemon-reload
+#   4) sudo systemctl enable --now vpn-bot
+#   5) смотреть логи:  journalctl -u vpn-bot -f
+
+[Unit]
+Description=VPN service - Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Папка, куда ты склонировал проект:
+WorkingDirectory=/root/vpn-service
+# Запускаем Python из виртуального окружения .venv:
+ExecStart=/root/vpn-service/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+# root нужен, чтобы выполнять команды wg/tc/nft (управление сервером).
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,95 +1,117 @@
 """
-Конфигурация бота. Здесь все настройки в одном месте.
+config.py — одно место, где собраны ВСЕ настройки.
 
-Зачем отдельный файл config.py?
-- Чтобы не было "магических чисел" в коде. Захотел поменять плечо с 3 на 5 — поправил в одном месте.
-- Чтобы не лезть в логику бота, когда нужно просто подкрутить параметры.
+Идея простая: настройки лежат в файле .env (его ты заполняешь руками),
+а здесь мы их читаем и превращаем в удобные переменные Python.
+Везде в проекте пишем `import config` и берём, например, `config.TELEGRAM_BOT_TOKEN`.
+
+Так нам не придётся хранить пароли и токены прямо в коде.
 """
 
 import os
+
 from dotenv import load_dotenv
 
-# Загружаем переменные из файла .env (там лежат секретные ключи)
+# Загружаем переменные из файла .env в окружение программы.
 load_dotenv()
 
 
-# ===== Секреты (из .env, в коде не светятся) =====
-KUCOIN_API_KEY = os.getenv("KUCOIN_API_KEY", "")
-KUCOIN_API_SECRET = os.getenv("KUCOIN_API_SECRET", "")
-KUCOIN_API_PASSPHRASE = os.getenv("KUCOIN_API_PASSPHRASE", "")
-
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-
-TELEGRAM_API_ID = int(os.getenv("TELEGRAM_API_ID", "0"))
-TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "")
-TELEGRAM_PHONE = os.getenv("TELEGRAM_PHONE", "")
-TELEGRAM_CHANNELS = [c.strip() for c in os.getenv("TELEGRAM_CHANNELS", "").split(",") if c.strip()]
+def _get(name: str, default: str = "") -> str:
+    """Прочитать строковую настройку из .env (или вернуть значение по умолчанию)."""
+    return os.getenv(name, default).strip()
 
 
-# ===== Режим работы =====
-# Если False — бот ничего не покупает по-настоящему, только пишет в лог "купил бы".
-# Начинать ВСЕГДА с False. Включай True только после долгого тестирования.
-LIVE_TRADING = os.getenv("LIVE_TRADING", "false").lower() == "true"
+def _get_int(name: str, default: int = 0) -> int:
+    """Прочитать число из .env."""
+    raw = _get(name, str(default))
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
-# ===== Какие монеты торгуем =====
-# Спотовые пары: покупаем за USDT
-SPOT_SYMBOLS = ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
-
-# Фьючерсные контракты (на KuCoin Futures формат отличается!)
-FUTURES_SYMBOLS = ["XBTUSDTM", "ETHUSDTM"]
+def _get_bool(name: str, default: bool = False) -> bool:
+    """Прочитать «да/нет» из .env (true/1/yes считаем за «да»)."""
+    return _get(name, "true" if default else "false").lower() in ("true", "1", "yes", "да")
 
 
-# ===== Управление риском (САМОЕ ВАЖНОЕ!) =====
-# Сколько % от депозита тратим на одну сделку. 2% — золотое правило для новичка.
-RISK_PER_TRADE_PERCENT = 2.0
+# ---------- Телеграм ----------
+TELEGRAM_BOT_TOKEN = _get("TELEGRAM_BOT_TOKEN")
+# Список ID администраторов (числа). Из строки "1,2,3" делаем [1, 2, 3].
+ADMIN_IDS = [int(x) for x in _get("ADMIN_IDS").replace(" ", "").split(",") if x]
 
-# Стоп-лосс: на сколько % ниже цены покупки закрываем сделку в минус.
-# Это страховка. Без стоп-лосса даже с ИИ можно слить весь депозит на одной сделке.
-STOP_LOSS_PERCENT = 3.0
-
-# Тейк-профит: на сколько % выше цены покупки фиксируем прибыль.
-TAKE_PROFIT_PERCENT = 6.0
-
-# Максимальное плечо на фьючерсах. Чем больше — тем выше и прибыль, и риск ликвидации.
-# Новичку 3x — это уже много. Профи редко идут выше 10x.
-MAX_LEVERAGE = 3
+# ---------- База данных ----------
+DB_PATH = _get("DB_PATH", "vpn_service.db")
 
 
-# ===== Стратегии =====
-# Какие индикаторы используем. Можно включать/выключать каждый.
-USE_RSI = True              # Индекс относительной силы (перекупленность/перепроданность)
-USE_MA_CROSSOVER = True     # Пересечение скользящих средних (тренд)
-USE_AI_NEWS = True          # ИИ-анализ новостей
-
-# Параметры RSI: классика — 14 свечей, перекуплено выше 70, перепродано ниже 30.
-RSI_PERIOD = 14
-RSI_OVERSOLD = 30           # Ниже — сигнал на покупку
-RSI_OVERBOUGHT = 70         # Выше — сигнал на продажу
-
-# Скользящие средние: быстрая пересекает медленную = смена тренда.
-MA_FAST = 9
-MA_SLOW = 21
-
-# Таймфрейм свечей: "1min", "5min", "15min", "1hour", "4hour", "1day"
-# Для новичка — "1hour", меньше шума.
-TIMEFRAME = "1hour"
-
-
-# ===== Цикл бота =====
-# Как часто бот проверяет рынок и новости (в секундах).
-# 300 = каждые 5 минут. Чаще — рискуешь упереться в лимиты API.
-LOOP_INTERVAL_SECONDS = 300
+# ---------- Тарифы ----------
+def _parse_plans(raw: str) -> list[dict]:
+    """
+    Превращаем строку "30:150,90:400" в удобный список словарей:
+    [{"days": 30, "price": 150}, {"days": 90, "price": 400}].
+    """
+    plans = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk or ":" not in chunk:
+            continue
+        days_str, price_str = chunk.split(":", 1)
+        try:
+            plans.append({"days": int(days_str), "price": int(price_str)})
+        except ValueError:
+            continue
+    return plans
 
 
-# ===== Новости =====
-# RSS-ленты популярных крипто-сайтов. Можно добавлять свои.
-NEWS_RSS_FEEDS = [
-    "https://www.coindesk.com/arc/outboundfeeds/rss/",
-    "https://cointelegraph.com/rss",
-    "https://decrypt.co/feed",
-]
+PLANS = _parse_plans(_get("PLANS", "30:150,90:400,180:700"))
 
-# Сколько последних новостей анализируем за один проход.
-NEWS_LIMIT = 20
+DEFAULT_TRAFFIC_LIMIT_GB = _get_int("DEFAULT_TRAFFIC_LIMIT_GB", 100)
+DEFAULT_SPEED_LIMIT_MBIT = _get_int("DEFAULT_SPEED_LIMIT_MBIT", 50)
+DEFAULT_PROTOCOL_PROFILE = _get("DEFAULT_PROTOCOL_PROFILE", "all")
+
+# ---------- Оплата ----------
+PAYMENT_PROVIDER = _get("PAYMENT_PROVIDER", "manual").lower()
+SBP_PHONE = _get("SBP_PHONE")
+SBP_RECEIVER = _get("SBP_RECEIVER")
+ANTARCTIC_WALLET = _get("ANTARCTIC_WALLET")
+YOOKASSA_SHOP_ID = _get("YOOKASSA_SHOP_ID")
+YOOKASSA_SECRET_KEY = _get("YOOKASSA_SECRET_KEY")
+
+# ---------- VPN-сервер ----------
+WG_INTERFACE = _get("WG_INTERFACE", "wg0")
+WG_CMD = _get("WG_CMD", "wg")
+WG_CONFIG_PATH = _get("WG_CONFIG_PATH", "/etc/wireguard/wg0.conf")
+WG_SERVER_PUBLIC_KEY = _get("WG_SERVER_PUBLIC_KEY")
+WG_SERVER_ENDPOINT = _get("WG_SERVER_ENDPOINT", "1.2.3.4:51820")
+WG_SUBNET = _get("WG_SUBNET", "10.8.0.0/24")
+WG_DNS = _get("WG_DNS", "1.1.1.1")
+
+# ---------- Ограничение трафика ----------
+WAN_INTERFACE = _get("WAN_INTERFACE", "eth0")
+APPLY_TRAFFIC_RULES = _get_bool("APPLY_TRAFFIC_RULES", False)
+
+# ---------- Веб-панель ----------
+WEB_PANEL_USER = _get("WEB_PANEL_USER", "admin")
+WEB_PANEL_PASSWORD = _get("WEB_PANEL_PASSWORD", "admin")
+WEB_PANEL_PORT = _get_int("WEB_PANEL_PORT", 8080)
+
+
+def is_admin(telegram_id: int) -> bool:
+    """Проверка: этот пользователь — администратор?"""
+    return telegram_id in ADMIN_IDS
+
+
+def check_required() -> list[str]:
+    """
+    Проверяем, что заполнены самые важные настройки.
+    Возвращаем список проблем (пустой список = всё хорошо).
+    Вызывается при старте, чтобы сразу понятно сказать, чего не хватает.
+    """
+    problems = []
+    if not TELEGRAM_BOT_TOKEN:
+        problems.append("Не заполнен TELEGRAM_BOT_TOKEN в .env")
+    if not ADMIN_IDS:
+        problems.append("Не заполнен ADMIN_IDS в .env (твой Telegram ID)")
+    if not PLANS:
+        problems.append("Не заданы тарифы PLANS в .env")
+    return problems
