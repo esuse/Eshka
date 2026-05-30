@@ -14,8 +14,11 @@ env/
 # Логи и данные бота
 logs/
 *.log
-trades.json
-state.json
+
+# База данных и сгенерированные конфиги клиентов
+*.db
+*.conf
+vpn_filter.nft
 
 # Среда разработки
 .vscode/

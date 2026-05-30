@@ -1,0 +1,21 @@
+# systemd-юнит для автозапуска веб-панели.
+#   1) поправь WorkingDirectory и User под свой сервер;
+#   2) sudo cp deploy/vpn-panel.service /etc/systemd/system/
+#   3) sudo systemctl daemon-reload
+#   4) sudo systemctl enable --now vpn-panel
+#   5) логи:  journalctl -u vpn-panel -f
+
+[Unit]
+Description=VPN service - admin web panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/root/vpn-service
+ExecStart=/root/vpn-service/.venv/bin/python web_panel.py
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
